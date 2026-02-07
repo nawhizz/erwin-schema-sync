@@ -14,8 +14,7 @@ class ColumnSchema:
     comment: Optional[str]
 
     def get_erwin_datatype(self) -> str:
-        """오라클 데이터 타입을 Erwin 데이터 타입 문자열로 변환 (기본 매핑)"""
-        # TODO: 더 정교한 매핑 필요
+        """오라클 데이터 타입 → Erwin Physical 데이터 타입 (원본 유지)"""
         if "CHAR" in self.data_type:
             return f"{self.data_type}({self.data_length})"
         elif "NUMBER" in self.data_type:
@@ -24,7 +23,41 @@ class ColumnSchema:
                     return f"NUMBER({self.data_precision},{self.data_scale})"
                 return f"NUMBER({self.data_precision})"
             return "NUMBER"
-        # 필요한 경우 추가 매핑 작성
+        return self.data_type
+
+    def get_logical_datatype(self) -> str:
+        """오라클 데이터 타입 → Erwin Logical 데이터 타입 (Oracle→Standard 변환)
+        
+        변환 규칙:
+        - VARCHAR2 → VARCHAR
+        - NVARCHAR2 → NVARCHAR
+        - NUMBER → NUMERIC 또는 INTEGER (scale 따라)
+        - 기타는 동일
+        """
+        if "VARCHAR2" in self.data_type:
+            logical_type = self.data_type.replace("VARCHAR2", "VARCHAR")
+            return f"{logical_type}({self.data_length})"
+        elif "NVARCHAR2" in self.data_type:
+            logical_type = self.data_type.replace("NVARCHAR2", "NVARCHAR")
+            return f"{logical_type}({self.data_length})"
+        elif "CHAR" in self.data_type:
+            return f"{self.data_type}({self.data_length})"
+        elif "NUMBER" in self.data_type:
+            # NUMBER(p,0) 또는 precision만 있으면 INTEGER 계열로 변환 가능
+            # 여기선 간단히 동일 형식 유지
+            if self.data_precision:
+                if self.data_scale and self.data_scale > 0:
+                    return f"NUMERIC({self.data_precision},{self.data_scale})"
+                return f"INTEGER"
+            return "NUMERIC"
+        elif self.data_type == "DATE":
+            return "DATE"
+        elif "TIMESTAMP" in self.data_type:
+            return "TIMESTAMP"
+        elif "CLOB" in self.data_type:
+            return "TEXT"
+        elif "BLOB" in self.data_type:
+            return "BLOB"
         return self.data_type
 
 @dataclass

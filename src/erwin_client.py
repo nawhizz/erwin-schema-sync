@@ -73,6 +73,29 @@ class ErwinClient:
         
         return self.persistence_units.Item(0)
 
+    def find_entity_by_name(self, session, entity_name: str):
+        """Physical Name으로 Entity 객체 검색
+        
+        Note: Logical Name(Name)은 Comment 값이 들어가므로, 
+        중복 체크 시 Physical Name(Physical_Name)으로 검색해야 함.
+        """
+        model_objects = session.ModelObjects
+        for obj in model_objects:
+            try:
+                if obj.ClassName == "Entity":
+                    # Physical_Name 속성으로 검색
+                    try:
+                        physical_name = obj.Properties("Physical_Name").Value
+                        if physical_name == entity_name:
+                            return obj
+                    except:
+                        # Physical_Name이 없으면 Name으로 폴백
+                        if obj.Name == entity_name:
+                            return obj
+            except:
+                continue
+        return None
+
     def create_or_update_entity(self, table_schema: TableSchema, area_name: str = "General"):
         """테이블 스키마를 기반으로 Erwin 엔티티 생성 또는 업데이트
         
@@ -98,39 +121,92 @@ class ErwinClient:
             
             model_objects = session.ModelObjects
             
+            # 0. 중복 체크 및 삭제
+            print(f"Checking for existing entity '{table_schema.name}'...")
+            existing_entity = self.find_entity_by_name(session, table_schema.name)
+            if existing_entity:
+                print(f"  Found existing entity: {existing_entity.ObjectId}")
+                print(f"  Deleting existing entity...")
+                try:
+                    model_objects.Remove(existing_entity.ObjectId)
+                    print(f"  [SUCCESS] Deleted existing entity.")
+                except Exception as del_err:
+                    print(f"  [WARNING] Failed to delete existing entity: {del_err}")
+            else:
+                print("  No existing entity found.")
+            
             # 1. Entity 생성 (문자열 클래스명 사용)
             print(f"Creating Entity using Add('Entity')...")
             erwin_entity = model_objects.Add("Entity")
             entity_id = erwin_entity.ObjectId
             print(f"Entity object created: {entity_id}")
             
-            # 2. Entity 이름 설정
-            print(f"Setting Entity Name to '{table_schema.name}'...")
+            # 2. Entity 이름 설정 (Logical = Comment, Physical = DB Name)
+            # Logical Name: Comment가 있으면 Comment, 없으면 DB 이름
+            logical_name = table_schema.comment or table_schema.name
+            physical_name = table_schema.name
+            
+            print(f"Setting Entity Names...")
+            print(f"  Logical (Name): '{logical_name}'")
+            print(f"  Physical (Physical_Name): '{physical_name}'")
+            
             try:
-                erwin_entity.Properties("Name").Value = table_schema.name
-                print(f"  [SUCCESS] Entity Name set to: {table_schema.name}")
+                erwin_entity.Properties("Name").Value = logical_name
+                print(f"  [SUCCESS] Logical Name set.")
             except Exception as e:
-                print(f"  [FAIL] Could not set Name: {e}")
+                print(f"  [FAIL] Could not set Logical Name: {e}")
+            
+            try:
+                erwin_entity.Properties("Physical_Name").Value = physical_name
+                print(f"  [SUCCESS] Physical Name set.")
+            except Exception as e:
+                print(f"  [FAIL] Could not set Physical Name: {e}")
             
             # 3. Attribute 추가 (Collect 메서드 사용!)
-            # Entity의 하위 객체 컬렉션을 가져와서 Attribute 추가
             print(f"\nAdding {len(table_schema.columns)} Attributes to Entity...")
             
             # Entity 하위 컬렉션 가져오기
             entity_children = model_objects.Collect(entity_id)
             
             for col in table_schema.columns:
-                print(f"  Adding Attribute: {col.name}")
+                # Logical Name: Comment가 있으면 Comment, 없으면 컬럼명
+                col_logical_name = col.comment or col.name
+                col_physical_name = col.name
+                
+                print(f"  Adding Attribute: {col_physical_name}")
                 try:
                     # Entity 하위 컬렉션에 Attribute 추가
                     attr = entity_children.Add("Attribute")
                     
-                    # Attribute 이름 설정
+                    # Logical Name (Name) 설정
                     try:
-                        attr.Properties("Name").Value = col.name
-                        print(f"    [SUCCESS] Attribute Name: {col.name}")
+                        attr.Properties("Name").Value = col_logical_name
+                        print(f"    Logical: '{col_logical_name}'")
                     except Exception as e:
-                        print(f"    [FAIL] Could not set Attribute Name: {e}")
+                        print(f"    [FAIL] Logical Name: {e}")
+                    
+                    # Physical Name 설정
+                    try:
+                        attr.Properties("Physical_Name").Value = col_physical_name
+                        print(f"    Physical: '{col_physical_name}'")
+                    except Exception as e:
+                        print(f"    [FAIL] Physical Name: {e}")
+                    
+                    # Physical Data Type 설정
+                    try:
+                        data_type = col.get_erwin_datatype()
+                        attr.Properties("Physical_Data_Type").Value = data_type
+                        print(f"    Physical DT: '{data_type}'")
+                    except Exception as e:
+                        print(f"    [FAIL] Physical Data Type: {e}")
+                    
+                    # Logical Data Type 설정
+                    try:
+                        logical_dtype = col.get_logical_datatype()
+                        attr.Properties("Logical_Data_Type").Value = logical_dtype
+                        print(f"    Logical DT: '{logical_dtype}'")
+                    except Exception as e:
+                        print(f"    [FAIL] Logical Data Type: {e}")
 
                 except Exception as attr_err:
                     print(f"    Failed to add attribute: {attr_err}")
