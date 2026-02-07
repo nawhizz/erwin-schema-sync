@@ -6,7 +6,10 @@ Oracle 데이터베이스의 테이블 스키마 정보를 Erwin Data Modeler로
 
 - Oracle 데이터베이스에서 테이블 및 컬럼 정보 추출
 - Erwin Data Modeler (7.3+)에 Entity 및 Attribute 자동 생성
-- COM API를 통한 Erwin과의 직접 연동
+- **Logical/Physical 이름 분리** (Oracle Comment → Logical Name)
+- **데이터타입 동기화** (Physical: NUMBER, VARCHAR2 / Logical: INTEGER, VARCHAR)
+- **중복 엔티티 자동 삭제 후 재생성**
+- 여러 테이블 일괄 처리 지원
 
 ## 요구 사항
 
@@ -29,9 +32,7 @@ pip install -e .
 `.env` 파일에 Oracle 접속 정보를 설정합니다:
 
 ```env
-ORACLE_USER=your_username
-ORACLE_PASSWORD=your_password
-ORACLE_DSN=localhost:1521/ORCL
+ORACLE_CONNECTION_STRING=user/password@host:port/service_name
 ```
 
 ## 사용법
@@ -45,9 +46,6 @@ uv run src/main.py --table EMP --table DEPT --model "path/to/model.erwin"
 
 # 파일에서 테이블 목록 읽어서 동기화
 uv run src/main.py --file tables.txt --model "path/to/model.erwin"
-
-# 혼합 사용 가능
-uv run src/main.py --table EMP --file tables.txt --model "path/to/model.erwin"
 ```
 
 ### 테이블 목록 파일 형식 (tables.txt)
@@ -59,44 +57,40 @@ DEPT
 SALGRADE
 ```
 
+## 동기화 규칙
+
+### Logical / Physical 이름
+
+| 구분 | Erwin 속성 | 값 |
+|------|------------|------|
+| Entity Logical | `Name` | Oracle 테이블 Comment (예: 직원정보) |
+| Entity Physical | `Physical_Name` | DB 테이블명 (예: EMP) |
+| Attribute Logical | `Name` | Oracle 컬럼 Comment (예: 직원번호) |
+| Attribute Physical | `Physical_Name` | DB 컬럼명 (예: EMPNO) |
+
+> Comment가 없으면 DB 이름을 Logical에도 사용합니다.
+
+### 데이터타입 변환
+
+| Oracle 타입 | Physical (Erwin) | Logical (Erwin) |
+|------------|-----------------|----------------|
+| VARCHAR2(n) | VARCHAR2(n) | VARCHAR(n) |
+| NUMBER(p,0) | NUMBER(p) | INTEGER |
+| NUMBER(p,s) | NUMBER(p,s) | NUMERIC(p,s) |
+| DATE | DATE | DATE |
+
 ## 프로젝트 구조
 
 ```
 erwin-schema-sync/
 ├── src/
-│   ├── __init__.py
 │   ├── main.py          # CLI 진입점
 │   ├── db_client.py     # Oracle DB 클라이언트
 │   ├── erwin_client.py  # Erwin COM 클라이언트
-│   └── models.py        # 데이터 모델 (TableSchema, ColumnSchema)
-├── .env                 # 환경 변수 (Oracle 접속 정보)
-├── pyproject.toml       # 프로젝트 설정
-└── README.md
+│   └── models.py        # 데이터 모델
+├── .env                 # Oracle 접속 정보
+└── pyproject.toml
 ```
-
-## 주요 구현 사항
-
-### Erwin COM API 연동
-
-Erwin SCAPI를 통해 모델 객체를 생성합니다:
-
-```python
-# Entity 생성
-entity = session.ModelObjects.Add("Entity")
-entity.Properties("Name").Value = "EMP"
-
-# Attribute 생성 (Entity 하위에 추가)
-entity_children = session.ModelObjects.Collect(entity.ObjectId)
-attr = entity_children.Add("Attribute")
-attr.Properties("Name").Value = "EMPNO"
-```
-
-### 핵심 발견
-
-| 문제 | 원인 | 해결 |
-|------|------|------|
-| "Name is read only" | GUID 클래스 ID 사용 | **문자열** "Entity" 사용 |
-| "cannot be child of Model" | Attribute를 Model에 직접 추가 | `Collect(entityId).Add()` 사용 |
 
 ## 라이선스
 
