@@ -1,0 +1,11 @@
+[project]
+name = "erwin-schema-sync"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = "==3.10.18"
+dependencies = [
+    "oracledb>=3.4.2",
+    "python-dotenv>=1.2.1",
+    "pywin32>=311",
+]
