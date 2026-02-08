@@ -168,6 +168,9 @@ class ErwinClient:
             # Entity 하위 컬렉션 가져오기
             entity_children = model_objects.Collect(entity_id)
             
+            # PK 설정을 위해 Attribute ObjectId 저장
+            pk_attr_ids = {}
+            
             for col in table_schema.columns:
                 # Logical Name: Comment가 있으면 Comment, 없으면 컬럼명
                 col_logical_name = col.comment or col.name
@@ -207,9 +210,40 @@ class ErwinClient:
                         print(f"    Logical DT: '{logical_dtype}'")
                     except Exception as e:
                         print(f"    [FAIL] Logical Data Type: {e}")
+                    
+                    # PK용 ObjectId 저장
+                    if col.is_pk:
+                        pk_attr_ids[col.name] = attr.ObjectId
 
                 except Exception as attr_err:
                     print(f"    Failed to add attribute: {attr_err}")
+            
+            # 4. PK(Primary Key) 설정
+            # PK 컬럼들을 모아서 Key_Group + Key_Group_Member로 구성
+            pk_columns = [c for c in table_schema.columns if c.is_pk]
+            if pk_columns:
+                print(f"\nConfiguring Primary Key ({len(pk_columns)} columns)...")
+                try:
+                    # Key_Group 생성
+                    kg = entity_children.Add("Key_Group")
+                    kg.Properties("Name").Value = f"PK_{table_schema.name}"
+                    kg.Properties("Key_Group_Type").Value = "PK"
+                    print(f"  Key_Group created: PK_{table_schema.name}")
+                    
+                    # 각 PK 컬럼에 대해 Key_Group_Member 추가
+                    kg_children = model_objects.Collect(kg.ObjectId)
+                    for pk_col in pk_columns:
+                        try:
+                            # Attribute ObjectId 찾기
+                            pk_attr_id = pk_attr_ids.get(pk_col.name)
+                            if pk_attr_id:
+                                member = kg_children.Add("Key_Group_Member")
+                                member.Properties("Attribute_Ref").Value = pk_attr_id
+                                print(f"  [PK] {pk_col.name}")
+                        except Exception as e:
+                            print(f"  [FAIL] PK member for {pk_col.name}: {e}")
+                except Exception as e:
+                    print(f"  [ERROR] Key_Group creation failed: {e}")
 
             session.CommitTransaction(txn_id)
             print("\nTransaction Committed.")

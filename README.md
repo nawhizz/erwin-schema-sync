@@ -8,6 +8,7 @@ Oracle 데이터베이스의 테이블 스키마 정보를 Erwin Data Modeler로
 - Erwin Data Modeler (7.3+)에 Entity 및 Attribute 자동 생성
 - **Logical/Physical 이름 분리** (Oracle Comment → Logical Name)
 - **데이터타입 동기화** (Physical: NUMBER, VARCHAR2 / Logical: INTEGER, VARCHAR)
+- **Primary Key 자동 설정** (Entity 상단 Key Area에 표시)
 - **중복 엔티티 자동 삭제 후 재생성**
 - 여러 테이블 일괄 처리 지원
 
@@ -33,7 +34,28 @@ pip install -e .
 
 ```env
 ORACLE_CONNECTION_STRING=user/password@host:port/service_name
+
+# 선택: Oracle Instant Client 경로 (Thick 모드용)
+# ORACLE_CLIENT_PATH=C:\oracle\instantclient_21_32bit
 ```
+
+### 환경 변수 설명
+
+| 변수 | 필수 | 설명 |
+|------|------|------|
+| `ORACLE_CONNECTION_STRING` | ✅ | Oracle 접속 문자열 (Easy Connect 형식) |
+| `ORACLE_CLIENT_PATH` | ❌ | Oracle Instant Client 경로 (32-bit 필수) |
+
+### Thick 모드 vs Thin 모드
+
+| 모드 | 필요 조건 | 장점 |
+|------|----------|------|
+| Thin | 없음 (순수 Python) | 설치 간편, 대부분 기능 작동 |
+| Thick | Oracle Instant Client (32-bit) | 모든 Oracle 기능 지원 |
+
+- `ORACLE_CLIENT_PATH`가 **설정되지 않으면** → 시스템 PATH에서 Oracle Client 자동 탐색
+- **32-bit Oracle Client가 없으면** → 자동으로 Thin 모드로 폴백
+
 
 ## 사용법
 
@@ -78,6 +100,11 @@ SALGRADE
 | NUMBER(p,0) | NUMBER(p) | INTEGER |
 | NUMBER(p,s) | NUMBER(p,s) | NUMERIC(p,s) |
 | DATE | DATE | DATE |
+
+### Primary Key
+
+- Oracle PK 제약조건이 있는 컬럼은 자동으로 Erwin Key Area(상단)에 배치됩니다.
+- `Key_Group` (Type=PK) + `Key_Group_Member` 방식으로 구성됩니다.
 
 ## 프로젝트 구조
 
